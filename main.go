@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"syscall"
 
 	"github.com/lestrrat/go-server-starter/listener"
@@ -40,7 +42,6 @@ func main() {
 		l = listeners[0]
 	}
 
-	var err error
 	model, err = mecab.NewModel(map[string]string{})
 	if err != nil {
 		panic(err)
