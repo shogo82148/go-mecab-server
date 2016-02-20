@@ -5,7 +5,7 @@ set -ue
 echo "[$$] start"
 
 ROOT=$(cd $(dirname $0);pwd)
-CONTAINER_DIR=$ROOT/containers/$$
+CONTAINER_DIR=/var/containers/mecab-$$
 mkdir -p $CONTAINER_DIR
 
 _cleanup_dir() {
@@ -35,12 +35,12 @@ _term() {
 
 _hup() {
     echo "[$$] Caught SIGHUP signal!"
-    kill -HUP "$CHILD" 2>/dev/null
+    kill -TERM "$CHILD" 2>/dev/null
 }
 
 _int() {
     echo "[$$] Caught SIGINT signal!"
-    kill -INT "$CHILD" 2>/dev/null
+    kill -TERM "$CHILD" 2>/dev/null
 }
 
 trap _term SIGTERM
