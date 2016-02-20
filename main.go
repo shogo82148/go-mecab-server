@@ -1,17 +1,30 @@
 package main
 
 import (
-	"fmt"
+	"encoding/json"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/lestrrat/go-server-starter/listener"
 	"github.com/shogo82148/go-gracedown"
 	"github.com/shogo82148/go-mecab"
 )
+
+type APIResponse struct {
+	MeCabIPADIC []Node `json:"mecab_ipadic"`
+}
+
+type Node struct {
+	Surface  string `json:"surface"`
+	Feature  string `json:"feature"`
+	POS      string `json:"pos"`
+	Baseform string `json:"baseform,omitempty"`
+	Reading  string `json:"reading,omitempty"`
+}
 
 var model mecab.Model
 
@@ -53,16 +66,58 @@ func main() {
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	sentense := query.Get("sentense")
+	result := APIResponse{
+		MeCabIPADIC: parseMeCabIPADIC(sentense),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	encoder := json.NewEncoder(w)
+	encoder.Encode(result)
+}
+
+func parseMeCabIPADIC(sentense string) []Node {
 	tagger, err := model.NewMeCab()
 	if err != nil {
 		panic(err)
 	}
 	defer tagger.Destroy()
 
-	query := r.URL.Query()
-	result, err := tagger.Parse(query.Get("sentense"))
+	nodes := []Node{}
+	node, err := tagger.ParseToNode(sentense)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Fprint(w, result)
+
+	for ; node != (mecab.Node{}); node = node.Next() {
+		if stat := node.Stat(); stat == mecab.BOSNode || stat == mecab.EOSNode {
+			continue
+		}
+		feature := node.Feature()
+		features := strings.Split(feature, ",")
+		posElem := make([]string, 0, 3)
+		for _, e := range features[:4] {
+			if e != "*" {
+				posElem = append(posElem, e)
+			}
+		}
+		reading := ""
+		if len(features) > 7 {
+			reading = features[7]
+		}
+		baseform := ""
+		if len(features) > 6 {
+			baseform = features[6]
+		}
+		nodes = append(nodes, Node{
+			Surface:  node.Surface(),
+			Feature:  feature,
+			POS:      strings.Join(posElem, "-"),
+			Reading:  reading,
+			Baseform: baseform,
+		})
+	}
+
+	return nodes
 }
