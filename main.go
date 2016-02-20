@@ -57,6 +57,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		panic(err)
 	}
+	defer tagger.Destroy()
 
 	query := r.URL.Query()
 	result, err := tagger.Parse(query.Get("sentense"))
