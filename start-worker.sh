@@ -23,7 +23,7 @@ docker export $CONTAINER_ID | tar x -C $CONTAINER_DIR
 docker rm $CONTAINER_ID
 
 # start daemon
-droot run --root $CONTAINER_DIR /go/bin/app &
+droot run --root $CONTAINER_DIR --user app --group app /bin/bash -c "cd /go/src/app; exec /go/bin/app" &
 CHILD=$!
 
 # Forward SIGTERM and SIGHUP to child
