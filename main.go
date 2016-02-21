@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -9,13 +10,17 @@ import (
 	"strings"
 	"syscall"
 
+	"gopkg.in/yaml.v2"
+
 	"github.com/lestrrat/go-server-starter/listener"
 	"github.com/shogo82148/go-gracedown"
 	"github.com/shogo82148/go-mecab"
 )
 
 type APIResponse struct {
-	MeCabIPADIC []Node `json:"mecab_ipadic"`
+	MeCabIPADIC    []Node `json:"mecab_ipadic,omitempty"`
+	MeCabNEologd   []Node `json:"mecab_neologd,omitempty"`
+	NEologdVersion string `json:"neologd_version,omitempty"`
 }
 
 type Node struct {
@@ -26,7 +31,14 @@ type Node struct {
 	Reading  string `json:"reading,omitempty"`
 }
 
-var model mecab.Model
+type NEologdConfig struct {
+	Dicdir  string `yaml:"dicdir"`
+	Version string `yaml:"version"`
+}
+
+var modelIPADIC mecab.Model
+var modelNEologd mecab.Model
+var neologdConfig NEologdConfig
 
 func main() {
 	signal_chan := make(chan os.Signal)
@@ -55,9 +67,18 @@ func main() {
 		l = listeners[0]
 	}
 
-	model, err = mecab.NewModel(map[string]string{})
+	modelIPADIC, err = mecab.NewModel(map[string]string{})
 	if err != nil {
 		panic(err)
+	}
+
+	buf, err := ioutil.ReadFile("neologd-config.yml")
+	if err == nil {
+		yaml.Unmarshal(buf, &neologdConfig)
+		modelNEologd, err = mecab.NewModel(map[string]string{"dicdir": neologdConfig.Dicdir})
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	mux := http.NewServeMux()
@@ -68,8 +89,11 @@ func main() {
 func handler(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	sentense := query.Get("sentense")
-	result := APIResponse{
-		MeCabIPADIC: parseMeCabIPADIC(sentense),
+	result := APIResponse{}
+	result.MeCabIPADIC = parseMeCabIPADIC(sentense)
+	if neologdConfig.Dicdir != "" {
+		result.MeCabNEologd = parseMeCabNEologd(sentense)
+		result.NEologdVersion = neologdConfig.Version
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -78,18 +102,35 @@ func handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func parseMeCabIPADIC(sentense string) []Node {
-	tagger, err := model.NewMeCab()
+	tagger, err := modelIPADIC.NewMeCab()
 	if err != nil {
 		panic(err)
 	}
 	defer tagger.Destroy()
 
-	nodes := []Node{}
 	node, err := tagger.ParseToNode(sentense)
 	if err != nil {
 		panic(err)
 	}
+	return node2struct(node)
+}
 
+func parseMeCabNEologd(sentense string) []Node {
+	tagger, err := modelNEologd.NewMeCab()
+	if err != nil {
+		panic(err)
+	}
+	defer tagger.Destroy()
+
+	node, err := tagger.ParseToNode(sentense)
+	if err != nil {
+		panic(err)
+	}
+	return node2struct(node)
+}
+
+func node2struct(node mecab.Node) []Node {
+	nodes := []Node{}
 	for ; node != (mecab.Node{}); node = node.Next() {
 		if stat := node.Stat(); stat == mecab.BOSNode || stat == mecab.EOSNode {
 			continue
@@ -118,6 +159,5 @@ func parseMeCabIPADIC(sentense string) []Node {
 			Baseform: baseform,
 		})
 	}
-
 	return nodes
 }
