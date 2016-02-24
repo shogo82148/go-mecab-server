@@ -90,10 +90,20 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	r.ParseMultipartForm(1024)
 	sentense := r.Form.Get("sentense")
+	parsers := r.Form.Get("parsers")
+	if parsers == "" {
+		parsers = "mecab_ipadic"
+	}
+	parsersMap := map[string]struct{}{}
+	for _, parser := range strings.Split(parsers, ",") {
+		parsersMap[parser] = struct{}{}
+	}
 
 	result := APIResponse{}
-	result.MeCabIPADIC = parseMeCabIPADIC(sentense)
-	if neologdConfig.Dicdir != "" {
+	if _, ok := parsersMap["mecab_ipadic"]; ok {
+		result.MeCabIPADIC = parseMeCabIPADIC(sentense)
+	}
+	if _, ok := parsersMap["mecab_neologd"]; ok && neologdConfig.Dicdir != "" {
 		result.MeCabNEologd = parseMeCabNEologd(sentense)
 		result.NEologdVersion = neologdConfig.Version
 	}
