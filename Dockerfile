@@ -17,6 +17,12 @@ ENV CGO_LDFLAGS "-L/usr/local/lib -lmecab -lstdc++"
 ENV CGO_FLAGS "-I/usr/local/include"
 
 RUN mkdir -p /go/src/app
+
+RUN apt-get update && apt-get install -y xz-utils patch file \
+    && git clone --depth 1 https://github.com/neologd/mecab-ipadic-neologd.git && cd mecab-ipadic-neologd && ./bin/install-mecab-ipadic-neologd --forceyes --asuser \
+    && echo "dicdir: $(mecab-config --dicdir)/mecab-ipadic-neologd\nversion: $(git log -n 1 --pretty=tformat:%H)" > /go/src/app/neologd-config.yml \
+    && cd .. && rm -rf mecab-ipadic-neologd
+
 WORKDIR /go/src/app
 
 COPY . /go/src/app

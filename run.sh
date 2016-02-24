@@ -2,6 +2,8 @@
 
 set -ue
 
+export LC_ALL=C
+
 ROOT=$(cd $(dirname $0);pwd)
 
 cd $ROOT
