@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -21,6 +22,7 @@ type APIResponse struct {
 	MeCabIPADIC    []Node `json:"mecab_ipadic,omitempty"`
 	MeCabNEologd   []Node `json:"mecab_neologd,omitempty"`
 	NEologdVersion string `json:"neologd_version,omitempty"`
+	MeCabUnidic    []Node `json:"mecab_unidic,omitempty"`
 }
 
 type Node struct {
@@ -36,9 +38,12 @@ type NEologdConfig struct {
 	Version string `yaml:"version"`
 }
 
+var mecabdic string
 var modelIPADIC mecab.Model
 var modelNEologd mecab.Model
+var modelUnidic mecab.Model
 var neologdConfig NEologdConfig
+var unidicAvailable bool
 
 func main() {
 	signal_chan := make(chan os.Signal)
@@ -67,6 +72,13 @@ func main() {
 		l = listeners[0]
 	}
 
+	b, err := exec.Command("mecab-config", "--dicdir").Output()
+	if err != nil {
+		panic(err)
+	}
+	mecabdic = strings.TrimSpace(string(b))
+
+	// load dictionaries
 	modelIPADIC, err = mecab.NewModel(map[string]string{})
 	if err != nil {
 		panic(err)
@@ -80,6 +92,9 @@ func main() {
 			panic(err)
 		}
 	}
+
+	modelUnidic, err = mecab.NewModel(map[string]string{"dicdir": mecabdic + "/unidic"})
+	unidicAvailable = err == nil
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", handler)
@@ -106,6 +121,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	if _, ok := parsersMap["mecab_neologd"]; ok && neologdConfig.Dicdir != "" {
 		result.MeCabNEologd = parseMeCabNEologd(sentense)
 		result.NEologdVersion = neologdConfig.Version
+	}
+	if _, ok := parsersMap["mecab_unidic"]; ok && unidicAvailable {
+		result.MeCabUnidic = parseMeCabUnidic(sentense)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -139,6 +157,50 @@ func parseMeCabNEologd(sentense string) []Node {
 		panic(err)
 	}
 	return node2struct(node)
+}
+
+func parseMeCabUnidic(sentense string) []Node {
+	tagger, err := modelUnidic.NewMeCab()
+	if err != nil {
+		panic(err)
+	}
+	defer tagger.Destroy()
+
+	node, err := tagger.ParseToNode(sentense)
+	if err != nil {
+		panic(err)
+	}
+
+	nodes := []Node{}
+	for ; node != (mecab.Node{}); node = node.Next() {
+		if stat := node.Stat(); stat == mecab.BOSNode || stat == mecab.EOSNode {
+			continue
+		}
+		feature := node.Feature()
+		features := strings.Split(feature, ",")
+		posElem := make([]string, 0, 3)
+		for _, e := range features[:4] {
+			if e != "*" {
+				posElem = append(posElem, e)
+			}
+		}
+		reading := ""
+		if len(features) > 6 {
+			reading = features[6]
+		}
+		baseform := ""
+		if len(features) > 8 {
+			baseform = features[8]
+		}
+		nodes = append(nodes, Node{
+			Surface:  node.Surface(),
+			Feature:  feature,
+			POS:      strings.Join(posElem, "-"),
+			Reading:  reading,
+			Baseform: baseform,
+		})
+	}
+	return nodes
 }
 
 func node2struct(node mecab.Node) []Node {
