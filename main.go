@@ -87,8 +87,10 @@ func main() {
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
-	sentense := query.Get("sentense")
+	r.ParseForm()
+	r.ParseMultipartForm(1024)
+	sentense := r.Form.Get("sentense")
+
 	result := APIResponse{}
 	result.MeCabIPADIC = parseMeCabIPADIC(sentense)
 	if neologdConfig.Dicdir != "" {
