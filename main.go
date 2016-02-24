@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"io/ioutil"
 	"net"
@@ -177,7 +179,7 @@ func parseMeCabUnidic(sentense string) []Node {
 			continue
 		}
 		feature := node.Feature()
-		features := strings.Split(feature, ",")
+		features, _ := splitFeature(feature)
 		posElem := make([]string, 0, 3)
 		for _, e := range features[:4] {
 			if e != "*" {
@@ -210,7 +212,7 @@ func node2struct(node mecab.Node) []Node {
 			continue
 		}
 		feature := node.Feature()
-		features := strings.Split(feature, ",")
+		features, _ := splitFeature(feature)
 		posElem := make([]string, 0, 3)
 		for _, e := range features[:4] {
 			if e != "*" {
@@ -234,4 +236,9 @@ func node2struct(node mecab.Node) []Node {
 		})
 	}
 	return nodes
+}
+
+func splitFeature(feature string) ([]string, error) {
+	reader := bytes.NewBufferString(feature)
+	return csv.NewReader(reader).Read()
 }
