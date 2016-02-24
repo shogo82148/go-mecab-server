@@ -29,4 +29,7 @@ COPY . /go/src/app
 RUN go-wrapper download
 RUN go-wrapper install
 
+# Diet
+RUN apt-get -y --purge remove xz-utils patch file g++ gcc make perl python && apt-get autoremove -y && rm -rf /usr/local/go
+
 CMD ["go-wrapper", "run"]
